@@ -1,0 +1,14 @@
+{
+  "cookies": [
+    "JSESSIONID=4d445d02-61bd-423c-aaee-1073d855ca93",
+    "_csrf_token=77bb36c7575b9d7a177c1201039c089b2c17f551f6ac3993450effd24362eac9",
+    "user_preferences=eyJ0aGVtZSI6ImxpZ2h0IiwibGFuZ3VhZ2UiOiJlbiIsInRpbWV6b25lIjoiVVRDIiwibm90aWZpY2F0aW9ucyI6dHJ1ZX0%3D",
+    "analytics_id=analytics_7030fd011c1d3a964badaaf4fe9a84b1",
+    "session_fingerprint=076cd2274e3421aacd0a746ef5daa748d905cb7f8d2c7d25f926c43be2d24047",
+    "feature_flags=eyJuZXdEYXNoYm9hcmQiOnRydWUsImJldGFGZWF0dXJlcyI6ZmFsc2UsImFkdmFuY2VkU2V0dGluZ3MiOnRydWUsImV4cGVyaW1lbnRhbFVJIjpmYWxzZX0%3D",
+    "tracking_consent=accepted",
+    "device_id=device_fea56dc41908e9be1f01b50d"
+  ],
+  "timestamp": 1749295525627,
+  "expiresIn": 86400000
+}
