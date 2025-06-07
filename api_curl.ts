@@ -3,26 +3,63 @@ import fs from 'fs/promises';
 import path from 'path';
 import { parse } from 'node-html-parser';
 const crypto = require('crypto');
+const { JSDOM } = require("jsdom");
 
-function sendApiRequest(url: string, accessToken: string, apiUser: string, userId: string) {
-  const timestamp = Math.floor(Date.now() / 1000); // Unix timestamp
+function extractJsonFromHtml(html: string) {
+  const dom = new JSDOM(html);
+  const doc = dom.window.document;
+
+  const jsonData = {
+    access_token: doc.querySelector("#access_token")?.value || null,
+    openId: doc.querySelector("#openId")?.value || null,
+    userId: doc.querySelector("#userId")?.value || null,
+    apiuser: doc.querySelector("#apiuser")?.value || null,
+    operateId: doc.querySelector("#operateId")?.value || null,
+    language: doc.querySelector("#language")?.value || null
+  };
+
+  return jsonData;
+}
+
+function createSignedRequest(params: object, secret: string) {
+  const timestamp = Math.floor(Date.now() / 1000);
+  const requestParams: any = { ...params, timestamp: timestamp.toString() };
+
+  // Sort and format parameters into query string
+  const queryString = Object.keys(requestParams)
+    .sort()
+    .map(key => `${key}=${encodeURIComponent(requestParams[key])}`)
+    .join("&");
+
+  // Generate HMAC-SHA1 hash
+  const hmac = crypto.createHmac("sha1", secret);
+  hmac.update(queryString);
+  const checkcode = hmac.digest("hex").toUpperCase();
+
+  return {
+    payload: queryString,
+    checkcode: checkcode,
+    fullPayload: `${queryString}&checkcode=${checkcode}`,
+    timestamp: timestamp
+  };
+}
+
+function sendUserRequest(url: string, accessToken: string, apiUser: string, userId: string, secret: string) {
   const openId = "openid456";
   const operateId = "op789";
+  const language = "en_US";
 
-  // Concatenating parameters to generate MD5 hash
-  const checkcodeData = `${accessToken}${apiUser}${userId}${timestamp}`;
-  const checkcode = crypto.createHash('md5').update(checkcodeData).digest('hex');
-
-  const body = new URLSearchParams({
+  const requestParams = {
     access_token: accessToken,
     apiuser: apiUser,
-    language: "en_US",
     openId: openId,
     operateId: operateId,
-    timestamp: timestamp.toString(),
     userId: userId,
-    checkcode: checkcode
-  }).toString();
+    language: language
+  };
+
+  // Generate signed request
+  const signedRequest = createSignedRequest(requestParams, secret);
 
   const options = {
     method: "POST",
@@ -33,16 +70,10 @@ function sendApiRequest(url: string, accessToken: string, apiUser: string, userI
       "Referer": "https://challenge.sunvoy.com/",
       "Referrer-Policy": "strict-origin-when-cross-origin"
     },
-    body: body
+    body: signedRequest.fullPayload
   };
 
   return fetch(url, options)
-    .then(response => response.json())
-    .then(data => {
-      console.log(data);
-      return data
-    })
-    .catch(error => console.error("Error:", error));
 }
 
 interface LoginCredentials {
@@ -389,13 +420,28 @@ class LegacyAuthClient {
 
   }
 }
+function extractJsUrls(html: string) {
+  const scriptRegex = /<script\s+src="([^"]+)"/g;
+  const urls = [];
+  let match;
+
+  while ((match = scriptRegex.exec(html)) !== null) {
+    urls.push(match[1]);
+  }
+
+  return urls;
+}
+function extractSecret(text: string) {
+  const match = text.match(/r\.createHmac\("sha1",\s*"(.*?)"\)/);
+  return match ? match[1] : null; // Returns extracted secret or null if not found
+}
+
 function extractRemoteApiUrl(htmlText: string) {
   const match = htmlText.match(/window\.REMOTE_API_URL\s*=\s*"(.*?)";/);
   return match ? match[1] : null; // Returns the extracted URL or null if not found
 }
 
 
-// Usage example
 async function main() {
   const client = new LegacyAuthClient(
     'https://challenge.sunvoy.com', // Base URL
@@ -416,31 +462,30 @@ async function main() {
     // Make other authenticated requests
     const settingsGetReq = await client.makeAuthenticatedRequest('/settings', { method: "GET" });
     const settingsUrlText = await settingsGetReq.text();
-    const settingsUrl = extractRemoteApiUrl(settingsUrlText)
+    const settingsUrl = extractRemoteApiUrl(settingsUrlText);
+    const jsUrlForSecret = extractJsUrls(settingsUrlText);
     const tokenGetReq = await client.makeAuthenticatedRequest('/settings/tokens', { method: "GET" });
     const tokenHtmlText = await tokenGetReq.text();
+    const tokenJson = extractJsonFromHtml(tokenHtmlText);
+    const secretJsReq = await client.makeAuthenticatedRequest(jsUrlForSecret[1], { method: "GET" });
+    const textsecret = await secretJsReq.text();
+    const secret = extractSecret(textsecret);
 
-    // if (response.ok) {
-    //   const myUser = await response.json();
-    //   const newusers = [...users, myUser];
-    //   console.log(myUser);
+    const userDataReq = await sendUserRequest(settingsUrl! + '/api/settings', tokenJson.access_token, tokenJson.apiuser, tokenJson.userId, secret!);
+    const userDataJson = await userDataReq.json()
+    try {
+      const dir = path.dirname('./data/users.json');
+      await fs.mkdir(dir, { recursive: true });
 
-    //   try {
-    //     const dir = path.dirname('./data/users.json');
-    //     await fs.mkdir(dir, { recursive: true });
-
-    //     await fs.writeFile('./data/users.json', JSON.stringify(newusers, null, 2));
-    //     console.log(`Users saved to ${'./data/users.json'}`);
-    //   } catch (error) {
-    //     console.error('Error saving users to file:', error);
-    //   }
-
-    // }
+      await fs.writeFile('./data/users.json', JSON.stringify([...users, userDataJson], null, 2));
+      console.log(`Users saved to ${'./data/users.json'}`);
+    } catch (error) {
+      console.error('Error saving users to file:', error);
+    }
 
   } catch (error) {
     console.error('Error:', error);
   }
 }
 
-// Run the example
 main();
