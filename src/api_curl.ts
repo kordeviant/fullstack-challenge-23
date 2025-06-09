@@ -176,28 +176,6 @@ class LegacyAuthClient {
     return cookiesToUse.join('; ');
   }
 
-  private mergeCookies(existingCookies: string[], newCookies: string[]): string[] {
-    const cookieMap = new Map<string, string>();
-
-    // Add existing cookies
-    existingCookies.forEach(cookie => {
-      const [name, value] = cookie.split('=');
-      if (name && value) {
-        cookieMap.set(name.trim(), cookie);
-      }
-    });
-
-    // Override with new cookies
-    newCookies.forEach(cookie => {
-      const [name, value] = cookie.split('=');
-      if (name && value) {
-        cookieMap.set(name.trim(), cookie);
-      }
-    });
-
-    return Array.from(cookieMap.values());
-  }
-
   private extractHiddenFields(html: string): { [key: string]: string } {
     const hiddenFields: { [key: string]: string } = {};
 
@@ -283,7 +261,7 @@ class LegacyAuthClient {
       const newCookies = this.parseCookies(loginResponse);
 
       // Merge cookies from login page and login response
-      const allCookies = this.mergeCookies(loginPageData.cookies, newCookies);
+      const allCookies = newCookies;
 
       // Check if login was successful
       const isSuccess =
@@ -459,29 +437,29 @@ async function main() {
     // Get users and save to file
     const users = await client.saveUsersToFile('./data/users.json');
 
-    // Make other authenticated requests
+    // load settings page
     const settingsGetReq = await client.makeAuthenticatedRequest('/settings', { method: "GET" });
     const settingsUrlText = await settingsGetReq.text();
+    // extract settings page data 
     const settingsUrl = extractRemoteApiUrl(settingsUrlText);
     const jsUrlForSecret = extractJsUrls(settingsUrlText);
+    // load token data
     const tokenGetReq = await client.makeAuthenticatedRequest('/settings/tokens', { method: "GET" });
     const tokenHtmlText = await tokenGetReq.text();
+    // extract token data
     const tokenJson = extractJsonFromHtml(tokenHtmlText);
+    // load secret js
     const secretJsReq = await client.makeAuthenticatedRequest(jsUrlForSecret[1], { method: "GET" });
     const textsecret = await secretJsReq.text();
+    // extract secret js
     const secret = extractSecret(textsecret);
-
+    // load userdata using secret and token data and settings url
     const userDataReq = await sendUserRequest(settingsUrl! + '/api/settings', tokenJson.access_token, tokenJson.apiuser, tokenJson.userId, secret!);
     const userDataJson = await userDataReq.json()
-    try {
-      const dir = path.dirname('./data/users.json');
-      await fs.mkdir(dir, { recursive: true });
+    // save users one last time
+    await fs.writeFile('./data/users.json', JSON.stringify([...users, userDataJson], null, 2));
+    console.log(`Users saved to ${'./data/users.json'}`);
 
-      await fs.writeFile('./data/users.json', JSON.stringify([...users, userDataJson], null, 2));
-      console.log(`Users saved to ${'./data/users.json'}`);
-    } catch (error) {
-      console.error('Error saving users to file:', error);
-    }
 
   } catch (error) {
     console.error('Error:', error);

@@ -1,45 +1,73 @@
 "use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-const node_fetch_1 = __importStar(require("node-fetch"));
+const node_fetch_1 = __importDefault(require("node-fetch"));
 const promises_1 = __importDefault(require("fs/promises"));
 const path_1 = __importDefault(require("path"));
 const node_html_parser_1 = require("node-html-parser");
+const crypto = require('crypto');
+const { JSDOM } = require("jsdom");
+function extractJsonFromHtml(html) {
+    const dom = new JSDOM(html);
+    const doc = dom.window.document;
+    const jsonData = {
+        access_token: doc.querySelector("#access_token")?.value || null,
+        openId: doc.querySelector("#openId")?.value || null,
+        userId: doc.querySelector("#userId")?.value || null,
+        apiuser: doc.querySelector("#apiuser")?.value || null,
+        operateId: doc.querySelector("#operateId")?.value || null,
+        language: doc.querySelector("#language")?.value || null
+    };
+    return jsonData;
+}
+function createSignedRequest(params, secret) {
+    const timestamp = Math.floor(Date.now() / 1000);
+    const requestParams = { ...params, timestamp: timestamp.toString() };
+    // Sort and format parameters into query string
+    const queryString = Object.keys(requestParams)
+        .sort()
+        .map(key => `${key}=${encodeURIComponent(requestParams[key])}`)
+        .join("&");
+    // Generate HMAC-SHA1 hash
+    const hmac = crypto.createHmac("sha1", secret);
+    hmac.update(queryString);
+    const checkcode = hmac.digest("hex").toUpperCase();
+    return {
+        payload: queryString,
+        checkcode: checkcode,
+        fullPayload: `${queryString}&checkcode=${checkcode}`,
+        timestamp: timestamp
+    };
+}
+function sendUserRequest(url, accessToken, apiUser, userId, secret) {
+    const openId = "openid456";
+    const operateId = "op789";
+    const language = "en_US";
+    const requestParams = {
+        access_token: accessToken,
+        apiuser: apiUser,
+        openId: openId,
+        operateId: operateId,
+        userId: userId,
+        language: language
+    };
+    // Generate signed request
+    const signedRequest = createSignedRequest(requestParams, secret);
+    const options = {
+        method: "POST",
+        headers: {
+            "accept": "*/*",
+            "accept-language": "en-US,en;q=0.9",
+            "content-type": "application/x-www-form-urlencoded",
+            "Referer": "https://challenge.sunvoy.com/",
+            "Referrer-Policy": "strict-origin-when-cross-origin"
+        },
+        body: signedRequest.fullPayload
+    };
+    return (0, node_fetch_1.default)(url, options);
+}
 class LegacyAuthClient {
     constructor(baseUrl, credentials, loginPageUrl = '/login', loginPostUrl = '/login', sessionFile = './session.json', sessionTimeoutHours = 24) {
         this.session = null;
@@ -99,24 +127,6 @@ class LegacyAuthClient {
         const cookiesToUse = cookies || (this.session?.cookies) || [];
         return cookiesToUse.join('; ');
     }
-    mergeCookies(existingCookies, newCookies) {
-        const cookieMap = new Map();
-        // Add existing cookies
-        existingCookies.forEach(cookie => {
-            const [name, value] = cookie.split('=');
-            if (name && value) {
-                cookieMap.set(name.trim(), cookie);
-            }
-        });
-        // Override with new cookies
-        newCookies.forEach(cookie => {
-            const [name, value] = cookie.split('=');
-            if (name && value) {
-                cookieMap.set(name.trim(), cookie);
-            }
-        });
-        return Array.from(cookieMap.values());
-    }
     extractHiddenFields(html) {
         const hiddenFields = {};
         try {
@@ -166,27 +176,27 @@ class LegacyAuthClient {
             const loginPageData = await this.getLoginPage();
             console.log('Attempting to login...');
             // Create FormData with credentials
-            const formData = new node_fetch_1.FormData();
-            formData.append('username', this.credentials.username);
-            formData.append('password', this.credentials.password);
+            const formData = new FormData();
             // Add all hidden fields from the login page
             Object.entries(loginPageData.hiddenFields || {}).forEach(([name, value]) => {
                 formData.append(name, value);
                 console.log(`Adding hidden field: ${name}`);
             });
+            formData.append('username', this.credentials.username);
+            formData.append('password', this.credentials.password);
             const loginResponse = await (0, node_fetch_1.default)(`${this.baseUrl}${this.loginPostUrl}`, {
                 method: 'POST',
                 headers: {
-                    'Cookie': this.getCookieHeader(loginPageData.cookies),
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                    "content-type": "application/x-www-form-urlencoded"
                 },
-                body: formData,
-                // redirect: 'manual' // Handle redirects manually to capture cookies
+                body: new URLSearchParams(formData).toString(),
+                redirect: 'manual' // Handle redirects manually to capture cookies
             });
+            console.log(`${this.baseUrl}${this.loginPostUrl}`);
             // Get new cookies from login response
             const newCookies = this.parseCookies(loginResponse);
             // Merge cookies from login page and login response
-            const allCookies = this.mergeCookies(loginPageData.cookies, newCookies);
+            const allCookies = newCookies;
             // Check if login was successful
             const isSuccess = loginResponse.status === 302 || // Redirect on success
                 loginResponse.status === 200 || // Success page
@@ -225,7 +235,7 @@ class LegacyAuthClient {
         try {
             console.log('Fetching users...');
             const response = await (0, node_fetch_1.default)(`${this.baseUrl}/api/users`, {
-                method: 'GET',
+                method: 'POST',
                 headers: {
                     'Cookie': this.getCookieHeader(),
                     'Accept': 'application/json',
@@ -296,13 +306,33 @@ class LegacyAuthClient {
                 console.error('Error saving users to file:', error);
             }
         }
+        else {
+            throw new Error("no users");
+        }
+        return users;
     }
 }
-// Usage example
+function extractJsUrls(html) {
+    const scriptRegex = /<script\s+src="([^"]+)"/g;
+    const urls = [];
+    let match;
+    while ((match = scriptRegex.exec(html)) !== null) {
+        urls.push(match[1]);
+    }
+    return urls;
+}
+function extractSecret(text) {
+    const match = text.match(/r\.createHmac\("sha1",\s*"(.*?)"\)/);
+    return match ? match[1] : null; // Returns extracted secret or null if not found
+}
+function extractRemoteApiUrl(htmlText) {
+    const match = htmlText.match(/window\.REMOTE_API_URL\s*=\s*"(.*?)";/);
+    return match ? match[1] : null; // Returns the extracted URL or null if not found
+}
 async function main() {
     const client = new LegacyAuthClient('https://challenge.sunvoy.com', // Base URL
     {
-        username: encodeURIComponent('demo@example.org'),
+        username: 'demo@example.org',
         password: 'test'
     }, '/login', // Login page URL (GET)
     '/login', // Login post URL (POST)
@@ -311,22 +341,32 @@ async function main() {
     );
     try {
         // Get users and save to file
-        await client.saveUsersToFile('./data/users.json');
-        // Or just get users
-        const users = await client.getUsers();
-        if (users) {
-            console.log('Users:', users);
-        }
-        // Make other authenticated requests
-        const response = await client.makeAuthenticatedRequest('/api/some-endpoint');
-        if (response.ok) {
-            const data = await response.json();
-            console.log('Other data:', data);
-        }
+        const users = await client.saveUsersToFile('./data/users.json');
+        // load settings page
+        const settingsGetReq = await client.makeAuthenticatedRequest('/settings', { method: "GET" });
+        const settingsUrlText = await settingsGetReq.text();
+        // extract settings page data 
+        const settingsUrl = extractRemoteApiUrl(settingsUrlText);
+        const jsUrlForSecret = extractJsUrls(settingsUrlText);
+        // load token data
+        const tokenGetReq = await client.makeAuthenticatedRequest('/settings/tokens', { method: "GET" });
+        const tokenHtmlText = await tokenGetReq.text();
+        // extract token data
+        const tokenJson = extractJsonFromHtml(tokenHtmlText);
+        // load secret js
+        const secretJsReq = await client.makeAuthenticatedRequest(jsUrlForSecret[1], { method: "GET" });
+        const textsecret = await secretJsReq.text();
+        // extract secret js
+        const secret = extractSecret(textsecret);
+        // load userdata using secret and token data and settings url
+        const userDataReq = await sendUserRequest(settingsUrl + '/api/settings', tokenJson.access_token, tokenJson.apiuser, tokenJson.userId, secret);
+        const userDataJson = await userDataReq.json();
+        // save users one last time
+        await promises_1.default.writeFile('./data/users.json', JSON.stringify([...users, userDataJson], null, 2));
+        console.log(`Users saved to ${'./data/users.json'}`);
     }
     catch (error) {
         console.error('Error:', error);
     }
 }
-// Run the example
 main();

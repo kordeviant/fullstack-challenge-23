@@ -6,7 +6,7 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "tsc",
-    "dev": "ts-node api_curl.ts",
+    "dev": "ts-node ./src/api_curl.ts",
     "start": "npm run build && node dist/api_curl.js"
   },
   "keywords": [],

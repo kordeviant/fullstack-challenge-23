@@ -1,14 +1,14 @@
 {
   "cookies": [
-    "JSESSIONID=4d445d02-61bd-423c-aaee-1073d855ca93",
-    "_csrf_token=77bb36c7575b9d7a177c1201039c089b2c17f551f6ac3993450effd24362eac9",
+    "JSESSIONID=60feb461-fa30-4020-8afe-a5ef3a20360c",
+    "_csrf_token=149cdf8eefe9eda34a9707b887088ffc04eceb5aaf011924a6c99cca4efec8cd",
     "user_preferences=eyJ0aGVtZSI6ImxpZ2h0IiwibGFuZ3VhZ2UiOiJlbiIsInRpbWV6b25lIjoiVVRDIiwibm90aWZpY2F0aW9ucyI6dHJ1ZX0%3D",
-    "analytics_id=analytics_7030fd011c1d3a964badaaf4fe9a84b1",
-    "session_fingerprint=076cd2274e3421aacd0a746ef5daa748d905cb7f8d2c7d25f926c43be2d24047",
+    "analytics_id=analytics_4fa9368fb5fc4771edeec60cf55a721c",
+    "session_fingerprint=d2cb6e8f0e54bc152693a1532a8a940f978b9aadfbf92da2a4c7322ec0a5a461",
     "feature_flags=eyJuZXdEYXNoYm9hcmQiOnRydWUsImJldGFGZWF0dXJlcyI6ZmFsc2UsImFkdmFuY2VkU2V0dGluZ3MiOnRydWUsImV4cGVyaW1lbnRhbFVJIjpmYWxzZX0%3D",
     "tracking_consent=accepted",
-    "device_id=device_fea56dc41908e9be1f01b50d"
+    "device_id=device_be1c91d4edf137a84535050a"
   ],
-  "timestamp": 1749295525627,
+  "timestamp": 1749477018681,
   "expiresIn": 86400000
 }
